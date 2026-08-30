@@ -14,6 +14,7 @@ func WatchPods(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	tracker *IncidentTracker,
+	shouldRemediate func(Diagnosis) bool,
 ) error {
 
 	fmt.Println("👀 KubeMedic watching Kubernetes...")

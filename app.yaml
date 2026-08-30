@@ -26,5 +26,5 @@ spec:
             - sh
             - -c
             - |
-              echo "REDIS_CONNECTION_FAILED"
+              echo "crashing"
               exit 2

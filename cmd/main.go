@@ -29,7 +29,8 @@ func main() {
 	err = controllers.WatchPods(
 		context.Background(),
 		clientset,
-		controllers.NewIncidentTracker())
+		controllers.NewIncidentTracker(),
+		controllers.ShouldRemediate)
 	if err != nil {
 		panic(err)
 	}

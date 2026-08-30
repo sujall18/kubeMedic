@@ -102,5 +102,24 @@ func AnalyzePod(
 		fmt.Printf("  Recommended action: %s\n", diagnosis.Action)
 
 		fmt.Println("----------------------------------------")
+
+		if ShouldRemediate(diagnosis) {
+
+			fmt.Println()
+			fmt.Println("🤖 KubeMedic will attempt automatic remediation")
+
+			err := RestartPod(
+				ctx,
+				clientset,
+				pod,
+			)
+
+			if err != nil {
+				fmt.Printf(
+					"❌ Remediation failed: %v\n",
+					err,
+				)
+			}
+		}
 	}
 }
