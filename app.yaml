@@ -15,4 +15,16 @@ spec:
       containers:
         - name: broken-app
           image: busybox
-          command: ["sh", "-c", "echo DATABASE_CONNECTION_FAILED; exit 2"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          command:
+            - sh
+            - -c
+            - |
+              echo "REDIS_CONNECTION_FAILED"
+              exit 2
