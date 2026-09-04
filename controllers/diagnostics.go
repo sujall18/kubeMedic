@@ -13,22 +13,26 @@ type Diagnosis struct {
 	Action   string
 }
 
+const DiagnosisImagePullFailure = "IMAGE_PULL_FAILURE"
+
+const DiagnosisOOMKilled = "OOM_KILLED"
+
 func DiagnoseContainer(
 	status corev1.ContainerStatus,
 	logs string,
 ) Diagnosis {
 
 	// 1. OOMKilled
-	if status.LastTerminationState.Terminated != nil {
 
+	if status.LastTerminationState.Terminated != nil {
 		termination := status.LastTerminationState.Terminated
 
 		if termination.Reason == "OOMKilled" {
 			return Diagnosis{
-				Problem:  "Container ran out of memory",
-				Reason:   "Container was terminated by the kernel",
-				Severity: "HIGH",
-				Action:   "Increase memory limit or investigate memory usage",
+				Problem:  "Container exceeded memory limit",
+				Reason:   DiagnosisOOMKilled,
+				Severity: "CRITICAL",
+				Action:   "Increase memory limit",
 			}
 		}
 	}
@@ -83,6 +87,18 @@ func DiagnoseContainer(
 				Reason:   "Container exited with code 1",
 				Severity: "HIGH",
 				Action:   "Inspect application logs and startup configuration",
+			}
+		}
+	}
+
+	if status.State.Waiting != nil {
+		switch status.State.Waiting.Reason {
+		case "ImagePullBackOff", "ErrImagePull":
+			return Diagnosis{
+				Problem:  "Container image could not be pulled",
+				Reason:   DiagnosisImagePullFailure,
+				Severity: "CRITICAL",
+				Action:   "Rollback deployment to previous image",
 			}
 		}
 	}

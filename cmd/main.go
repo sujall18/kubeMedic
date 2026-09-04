@@ -21,6 +21,11 @@ func main() {
 		panic(err)
 	}
 
+	// Give KubeMedic reasonable client-side API capacity.
+	// Verification/remediation performs several API calls during a rollout.
+	config.QPS = 20
+	config.Burst = 40
+
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err)

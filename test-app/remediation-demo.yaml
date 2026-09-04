@@ -3,7 +3,8 @@ kind: Deployment
 metadata:
   name: broken-app
 spec:
-  replicas: 1
+  replicas: 3
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: broken-app
@@ -14,17 +15,8 @@ spec:
     spec:
       containers:
         - name: broken-app
-          image: busybox
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
+          image: busybox:1.36
           command:
             - sh
             - -c
-            - |
-              echo "crashing"
-              exit 2
+            - echo "healthy"; sleep 3600

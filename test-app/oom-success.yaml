@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-success
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: memory-success
+  template:
+    metadata:
+      labels:
+        app: memory-success
+    spec:
+      containers:
+        - name: memory-success
+          image: python:3.12-alpine
+          command:
+            - python
+            - -c
+            - |
+              x = []
+              for i in range(80):
+                  x.append("X" * 1024 * 1024)
+              print("healthy")
+              import time
+              time.sleep(3600)
+          resources:
+            requests:
+              memory: "32Mi"
+            limits:
+              memory: "64Mi"

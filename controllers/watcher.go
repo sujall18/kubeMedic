@@ -19,34 +19,66 @@ func WatchPods(
 
 	fmt.Println("👀 KubeMedic watching Kubernetes...")
 
+	// ------------------------------------------------------------
+	// 1. HANDLE PODS THAT ALREADY EXIST
+	// ------------------------------------------------------------
+	pods, err := clientset.CoreV1().Pods("").List(
+		ctx,
+		metav1.ListOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("list existing pods: %w", err)
+	}
+
+	fmt.Printf("🔎 Initial scan: found %d pods\n", len(pods.Items))
+
+	for i := range pods.Items {
+		AnalyzePod(ctx, clientset, &pods.Items[i], tracker)
+	}
+
+	// ------------------------------------------------------------
+	// 2. WATCH FOR NEW CHANGES
+	// ------------------------------------------------------------
 	watcher, err := clientset.CoreV1().Pods("").Watch(
 		ctx,
 		metav1.ListOptions{},
 	)
-
 	if err != nil {
-		return err
+		return fmt.Errorf("watch pods: %w", err)
 	}
 
 	defer watcher.Stop()
 
-	for event := range watcher.ResultChan() {
+	for {
+		select {
 
-		pod, ok := event.Object.(*corev1.Pod)
+		case <-ctx.Done():
+			return ctx.Err()
 
-		if !ok {
-			continue
-		}
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				return nil
+			}
 
-		switch event.Type {
+			pod, ok := event.Object.(*corev1.Pod)
+			if !ok {
+				continue
+			}
 
-		case watch.Added:
-			AnalyzePod(ctx, clientset, pod, tracker)
+			switch event.Type {
 
-		case watch.Modified:
-			AnalyzePod(ctx, clientset, pod, tracker)
+			case watch.Added:
+				AnalyzePod(ctx, clientset, pod, tracker)
+
+			case watch.Modified:
+				AnalyzePod(ctx, clientset, pod, tracker)
+
+			case watch.Deleted:
+				// Nothing to remediate.
+
+			case watch.Error:
+				fmt.Printf("⚠️ Kubernetes watch error: %v\n", event.Object)
+			}
 		}
 	}
-
-	return nil
 }
