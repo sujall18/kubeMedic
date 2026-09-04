@@ -1,148 +1,357 @@
 # KubeMedic
 
-KubeMedic is a Go-based Kubernetes incident detection and remediation tool.
+**Kubernetes Incident Detection & Automated Remediation Engine**
 
-It monitors Kubernetes workloads, detects common application failures, collects diagnostic information, identifies potential causes, and can perform controlled remediation actions.
+KubeMedic is a Go-based Kubernetes incident-response system that monitors workloads, diagnoses common container failures, applies controlled remediation policies, and verifies workload recovery.
+
+The project was built to explore how automated incident response can operate above Kubernetes' built-in self-healing mechanisms.
+
+## What problem does it solve?
+
+Kubernetes can automatically restart failed containers and maintain the desired number of replicas, but restarting a workload does not necessarily resolve the underlying cause.
+
+For example:
+
+```text
+Application crashes
+       ↓
+Kubernetes restarts container
+       ↓
+Application crashes again
+       ↓
+CrashLoopBackOff
+       ↓
+Kubernetes keeps attempting recovery
+```
+
+KubeMedic adds a diagnosis and remediation layer:
+
+```text
+Failure
+   ↓
+Detection
+   ↓
+Diagnosis
+   ↓
+Remediation Policy
+   ↓
+Automated Remediation
+   ↓
+Verification
+   ↓
+Resolved / Failed
+```
 
 ## Features
 
-* Kubernetes pod monitoring
-* Incident detection
-* CrashLoopBackOff detection
-* ImagePullBackOff detection
-* Container restart tracking
-* Exit code and termination reason analysis
-* Previous container log collection
-* Basic incident diagnosis
-* Deployment rollback/remediation
-* Remediation verification
+### Incident Detection
 
-## Architecture
+KubeMedic monitors Kubernetes Pods and detects conditions including:
 
-```text
-Kubernetes
-    │
-    ▼
-KubeMedic
-    │
-    ├── Detect incident
-    │
-    ├── Collect evidence
-    │      ├── Pod status
-    │      ├── Restart count
-    │      ├── Container state
-    │      ├── Exit code
-    │      └── Previous logs
-    │
-    ├── Diagnose
-    │
-    ├── Remediate
-    │
-    └── Verify recovery
-```
+* `CrashLoopBackOff`
+* `OOMKilled`
+* `ImagePullBackOff`
+* `ErrImagePull`
 
-## Tech Stack
+Future work
 
-* Go
-* Kubernetes
-* Kubernetes client-go
-* Docker
-* Minikube
+* database connection failures
+* connection refused errors
+* permission failures
+* container exit failures
 
-## Example Incidents
+KubeMedic performs an initial scan of existing Pods and then watches for subsequent Kubernetes events.
 
-### CrashLoopBackOff
+### Diagnosis
 
-KubeMedic can detect a repeatedly crashing container and collect information such as:
+Incidents are analysed using Kubernetes workload state and container evidence, including:
+
+* container termination reasons
+* exit codes
+* previous container logs
+* Pod status
+* Deployment and ReplicaSet relationships
+
+Diagnoses are represented using structured information such as:
 
 ```text
-Status: CrashLoopBackOff
-Restarts: 17
-Exit Code: 1
-Previous Logs: CRASHING
+Problem
+Reason
+Severity
+Recommended action
 ```
 
-It can then generate a diagnosis and recommend an appropriate action.
+### Automated OOM Remediation
 
-### ImagePullBackOff
-
-KubeMedic can detect an invalid or unavailable container image and identify a potential deployment rollback.
+For memory-related failures, KubeMedic can automatically increase the Deployment's memory limit according to a bounded remediation policy.
 
 Example:
 
 ```text
-Image:
-definitely-does-not-exist:kubemedic-test
-
-Diagnosis:
-Image pull failure
-
-Remediation:
-Rollback to previous known-good deployment revision
+64Mi
+  ↓
+128Mi
+  ↓
+256Mi
 ```
 
-## Running Locally
+The remediation is performed through the Kubernetes API rather than by modifying local YAML files.
 
-Start Minikube:
+Automatic remediation is bounded to prevent uncontrolled resource escalation.
 
-```bash
-minikube start
-```
+### Deployment Rollback
 
-Run KubeMedic:
+For image-related failures such as `ImagePullBackOff`, KubeMedic can:
 
-```bash
-go run ./cmd
-```
+1. Identify the affected Deployment.
+2. Inspect Deployment revision history.
+3. Locate a previous revision.
+4. Restore the previous Pod template.
+5. Update the Deployment through the Kubernetes API.
+6. Verify the resulting workload state.
 
-KubeMedic will connect to the Kubernetes cluster using the local kubeconfig and begin monitoring workloads.
-
-## Testing Incidents
-
-The project includes deliberately broken Kubernetes workloads for testing KubeMedic's detection and remediation capabilities.
-
-For example:
-
-```bash
-kubectl apply -f test-app/
-```
-
-Then monitor the KubeMedic output:
-
-```bash
-go run ./cmd
-```
-
-You can inspect the Kubernetes workload with:
-
-```bash
-kubectl get pods
-kubectl get deployments
-kubectl describe pod <pod-name>
-```
-
-## Project Goal
-
-KubeMedic is being developed as an engineering project to explore automated Kubernetes incident response.
-
-The goal is not to replace Kubernetes' built-in self-healing capabilities. Instead, KubeMedic focuses on the layer above basic workload recovery:
+Example:
 
 ```text
-Detect
-  ↓
-Diagnose
-  ↓
-Choose safe remediation
-  ↓
-Apply remediation
-  ↓
-Verify recovery
+Working Deployment
+       ↓
+Broken container image
+       ↓
+ImagePullBackOff
+       ↓
+KubeMedic diagnosis
+       ↓
+Previous Deployment revision
+       ↓
+Rollback
+       ↓
+Workload recovery
 ```
 
-Future development will focus on safer automated remediation, additional failure types, observability, testing, and production-oriented Kubernetes engineering practices.
+### Incident State Management
 
-## Status
+KubeMedic tracks incident handling state to prevent repeated remediation attempts for the same incident and to maintain bounded remediation behaviour.
 
-🚧 **Work in progress**
+## Architecture
 
-The current implementation supports incident detection, diagnostics, and initial remediation workflows. More remediation strategies and production-hardening features are planned.
+```text
+                 Kubernetes Cluster
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │   Watcher   │
+                 └──────┬──────┘
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │  Detection  │
+                 └──────┬──────┘
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │  Diagnosis  │
+                 └──────┬──────┘
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │   Policy    │
+                 │    Engine   │
+                 └──────┬──────┘
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │ Remediation │
+                 └──────┬──────┘
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │ Verification│
+                 └──────┬──────┘
+                        │
+                  ┌─────┴─────┐
+                  ▼           ▼
+              RESOLVED      FAILED
+```
+
+## Technology Stack
+
+* **Go**
+* **Kubernetes**
+* **Kubernetes client-go**
+* **Docker**
+* **Minikube**
+* **Linux / WSL**
+* Kubernetes Deployments
+* ReplicaSets
+* Kubernetes API
+* Container logs and lifecycle state
+
+## Project Structure
+
+```text
+kubeMedic/
+├── cmd/
+│   └── main.go
+├── controllers/
+│   ├── diagnostics.go
+│   ├── incidents.go
+│   ├── pod_analyzer.go
+│   ├── remediation.go
+│   └── watcher.go
+├── test-app/
+│   ├── oom-broken.yaml
+│   ├── oom-success.yaml
+│   ├── imagePullErr.yaml
+│   ├── remediation-demo.yaml
+│   └── remediation-broken.yaml
+├── go.mod
+└── README.md
+```
+
+## Running KubeMedic
+
+### Prerequisites
+
+Install:
+
+* Go
+* Docker
+* kubectl
+* Minikube
+
+Start a local Kubernetes cluster:
+
+```bash
+minikube start --driver=docker
+```
+
+Clone the repository and enter the project:
+
+```bash
+git clone https://github.com/sujall18/kubeMedic.git
+cd kubeMedic
+```
+
+Install dependencies:
+
+```bash
+go mod tidy
+```
+
+Build and test:
+
+```bash
+go test ./...
+go build ./...
+```
+
+Start KubeMedic:
+
+```bash
+go run ./cmd
+```
+
+## Testing OOM Remediation
+
+Deploy the intentionally failing workload:
+
+```bash
+kubectl apply -f test-app/oom-broken.yaml
+```
+
+Start KubeMedic:
+
+```bash
+go run ./cmd
+```
+
+KubeMedic detects the OOM failure and attempts bounded memory escalation.
+
+Example:
+
+```text
+🚨 INCIDENT DETECTED
+
+Diagnosis:
+  Problem: Container exceeded memory limit
+  Reason: OOM_KILLED
+  Severity: CRITICAL
+  Recommended action: Increase memory limit
+
+⚕️ OOM remediation attempt 1/2
+Memory: 64Mi → 128Mi
+```
+
+The live Kubernetes Deployment is updated through the Kubernetes API.
+
+Verify the resulting resource:
+
+```bash
+kubectl get deployment memory-hog \
+  -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}{"\n"}'
+```
+
+## Testing Deployment Rollback
+
+Deploy a healthy version:
+
+```bash
+kubectl apply -f test-app/remediation-demo.yaml
+```
+
+Introduce a broken image:
+
+```bash
+kubectl set image deployment/broken-app \
+  broken-app=definitely-does-not-exist:kubemedic-test
+```
+
+KubeMedic detects the resulting image-pull failure and can use the previous Deployment revision for rollback.
+
+## Engineering Principles
+
+KubeMedic is designed around several principles:
+
+### Diagnose before acting
+
+A Kubernetes restart is not necessarily a remediation. KubeMedic first attempts to determine the failure cause.
+
+### Bounded automation
+
+Automatic remediation must have explicit limits rather than continuously modifying resources.
+
+### Verify after remediation
+
+A successful Kubernetes API update does not automatically mean the application recovered. Remediation should be followed by workload verification.
+
+### Kubernetes API over shell commands
+
+The controller interacts with Kubernetes through `client-go` rather than depending on shelling out to `kubectl` for remediation.
+
+### Idempotent incident handling
+
+Incident state is tracked to avoid repeatedly acting on the same failure event.
+
+## What KubeMedic Demonstrates
+
+This project demonstrates practical experience with:
+
+* Kubernetes workload lifecycle
+* Kubernetes API programming
+* Go systems development
+* container failure analysis
+* incident-response workflows
+* automated remediation
+* Deployment and ReplicaSet management
+* rollout and rollback concepts
+* resource management
+* failure handling
+* bounded automation
+* verification-driven recovery
+* debugging distributed/containerised workloads
+
+## Project Status
+
+KubeMedic is a **working engineering prototype** demonstrating Kubernetes incident detection, diagnosis, controlled remediation and recovery workflows.
+
+It is not intended to replace Kubernetes controllers, operators or production incident-management platforms. The project focuses on demonstrating the engineering principles behind automated Kubernetes incident response.
