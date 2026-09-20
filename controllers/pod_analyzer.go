@@ -9,6 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/sujall18/kubeMedic/observability"
 )
 
 func AnalyzePod(
@@ -47,6 +49,14 @@ func AnalyzePod(
 			tracker.Resolve(key)
 			continue
 		}
+
+		observability.IncidentsDetected.
+			WithLabelValues(reason).
+			Inc()
+
+		observability.ActiveIncidents.Inc()
+
+		defer observability.ActiveIncidents.Dec()
 
 		fmt.Println()
 		fmt.Println("🚨 INCIDENT DETECTED")
@@ -297,7 +307,13 @@ func AnalyzePod(
 				"❌ INCIDENT UNRESOLVED: %v\n",
 				err,
 			)
+			observability.VerificationTotal.
+				WithLabelValues("failure").
+				Inc()
 
+			observability.IncidentsExhausted.
+				WithLabelValues(reason).
+				Inc()
 			tracker.Exhaust(key)
 
 			return

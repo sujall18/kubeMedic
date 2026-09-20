@@ -12,6 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/sujall18/kubeMedic/observability"
 )
 
 const deploymentRevisionAnnotation = "deployment.kubernetes.io/revision"
@@ -76,12 +78,36 @@ func RemediateCrashLoop(
 	clientset kubernetes.Interface,
 	pod *corev1.Pod,
 	policy RemediationPolicy,
-) (RemediationResult, error) {
-	result := RemediationResult{
-		Action:     RemediationRollback,
-		Deployment: "unknown",
-		Automatic:  policy.AutomaticRollback,
-	}
+) (result RemediationResult, err error) {
+
+	start := time.Now()
+	observability.ActiveIncidents.Inc()
+
+	defer func() {
+		observability.RemediationDuration.
+			WithLabelValues(RemediationRollback).
+			Observe(time.Since(start).Seconds())
+
+		observability.ActiveIncidents.Dec()
+
+		if err != nil {
+			observability.RemediationsTotal.
+				WithLabelValues(RemediationRollback, "failure").
+				Inc()
+			return
+		}
+
+		if result.Executed {
+			observability.RemediationsTotal.
+				WithLabelValues(RemediationRollback, "success").
+				Inc()
+			return
+		}
+
+		observability.RemediationsTotal.
+			WithLabelValues(RemediationRollback, "skipped").
+			Inc()
+	}()
 
 	if !policy.AutomaticRollback {
 		result.Message = "automatic rollback disabled by policy"
