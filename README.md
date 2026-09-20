@@ -354,4 +354,6 @@ This project demonstrates practical experience with:
 
 KubeMedic is a **working engineering prototype** demonstrating Kubernetes incident detection, diagnosis, controlled remediation and recovery workflows.
 
+Working on Observability 
+
 It is not intended to replace Kubernetes controllers, operators or production incident-management platforms. The project focuses on demonstrating the engineering principles behind automated Kubernetes incident response.
